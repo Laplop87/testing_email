@@ -18,14 +18,16 @@ API_BASE_URL = "https://mailboxlayer.com/php_helper_scripts/email_api_n.php"
 
 def get_secret():
     global SECRET
-    response = SESSION.get(MAILBOX_LAYER_URL)
-    soup = bs4.BeautifulSoup(response.text, "html.parser")
-    secret = soup.select_one("input[name='scl_request_secret']").get("value")
-    if secret != SECRET:
-        print("New secret obtained!")
-        SECRET = secret
-        print(SECRET)
-    return secret
+    while not SECRET:  # Retry until a valid secret is obtained
+        response = SESSION.get(MAILBOX_LAYER_URL)
+        soup = bs4.BeautifulSoup(response.text, "html.parser")
+        secret_input = soup.select_one("input[name='scl_request_secret']")
+        if secret_input:
+            SECRET = secret_input.get("value")
+            print("New secret obtained:", SECRET)
+        else:
+            print("Secret not found. Retrying...")
+            time.sleep(5)  # Wait before retrying
 
 def is_valid_email(email):
     pattern = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
@@ -39,8 +41,9 @@ def get_status(email, _hash=None):
     global SECRET
     if not is_valid_email(email):
         return None
-    if not _hash:
-        _hash = generate_hash(email, SECRET)
+    if not SECRET:
+        get_secret()  # Ensure we have a valid secret
+    _hash = generate_hash(email, SECRET)
     url = f"{API_BASE_URL}?secret_key={_hash}&email_address={urllib.parse.quote(email)}"
     payload = {}
     headers = {}
@@ -68,9 +71,9 @@ def get_status(email, _hash=None):
             return None
 
 def update_secret():
-    get_secret()
     global TIMER
-    TIMER = threading.Timer(5, update_secret)
+    get_secret()
+    TIMER = threading.Timer(60, update_secret)  # Schedule update after 60 seconds
     TIMER.start()
 
 def stop_timer():
@@ -80,13 +83,13 @@ def stop_timer():
 
 def process_email(email):
     global SECRET
-    get_secret()
+    get_secret()  # Ensure we have a valid secret
     _hash = generate_hash(email, SECRET)
     return get_status(email, _hash)
 
 def validate_emails(emails, progress_bar):
     valid_emails = []
-    update_secret()  # start the timer
+    update_secret()  # Start the secret update timer
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=9) as executor:
         futures = [executor.submit(process_email, email) for email in emails]
@@ -100,7 +103,7 @@ def validate_emails(emails, progress_bar):
                 progress = (i + 1) / len(emails)
                 progress_bar.progress(progress)
 
-    stop_timer()
+    stop_timer()  # Stop the secret update timer
     return valid_emails
 
 def main():
