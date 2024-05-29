@@ -45,7 +45,7 @@ def generate_hash(email_address, secret):
 def get_status(email, _hash=None):
     global SECRET
     if not is_valid_email(email):
-        return None
+        return {"email": email, "status": "invalid"}
     if not SECRET:
         get_secret()  # Ensure we have a valid secret
     _hash = generate_hash(email, SECRET)
@@ -57,12 +57,12 @@ def get_status(email, _hash=None):
         try:
             response = response.json()
             if response.get("score", 0) > 0.5:
-                return response
+                return {"email": email, "status": "valid"}
             else:
-                return None
+                return {"email": email, "status": "invalid"}
         except ValueError:
             print(f"Error decoding JSON response for {email}")
-            return None
+            return {"email": email, "status": "unknown"}
 
 def update_secret():
     global TIMER
@@ -82,7 +82,7 @@ def process_email(email):
     return get_status(email, _hash)
 
 def validate_emails(emails, progress_bar):
-    valid_emails = []
+    email_statuses = []
     update_secret()  # Start the secret update timer
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=9) as executor:
@@ -91,14 +91,13 @@ def validate_emails(emails, progress_bar):
         spinner_text = "Validating email addresses..."
         with st.spinner(spinner_text):
             for i, future in enumerate(concurrent.futures.as_completed(futures)):
-                email = future.result()
-                if email:
-                    valid_emails.append(email)
+                email_status = future.result()
+                email_statuses.append(email_status)
                 progress = (i + 1) / len(emails)
                 progress_bar.progress(progress)
 
     stop_timer()  # Stop the secret update timer
-    return valid_emails
+    return email_statuses
 
 def main():
     st.set_page_config(page_title="Email Validator", page_icon=":envelope:")
@@ -114,8 +113,8 @@ def main():
         4. Click the "Validate Email" button to start validation.
     """)
 
-    if "valid_emails" not in st.session_state:
-        st.session_state.valid_emails = []
+    if "email_statuses" not in st.session_state:
+        st.session_state.email_statuses = []
 
     # Validate email addresses from uploaded CSV file
     st.sidebar.write("### Upload CSV file")
@@ -129,29 +128,26 @@ def main():
             st.info(f"Total emails to process: {total_emails}")
             
             progress_bar = st.progress(0)
-            st.session_state.valid_emails += validate_emails(df[column_name].tolist(), progress_bar)
+            st.session_state.email_statuses += validate_emails(df[column_name].tolist(), progress_bar)
 
     # Display the validated email addresses
-    if st.session_state.valid_emails:
-        st.write(f"Found {len(st.session_state.valid_emails)} valid email addresses.")
+    if st.session_state.email_statuses:
+        st.write(f"Processed {len(st.session_state.email_statuses)} email addresses.")
 
-        columns = st.session_state.valid_emails[0].keys()
-        visible_columns = st.multiselect("Select columns to show", list(columns), default=list(columns))
-        
-        valid_email_df = pd.DataFrame(st.session_state.valid_emails)[visible_columns]
+        valid_email_df = pd.DataFrame(st.session_state.email_statuses)
         st.write(valid_email_df)
         
         csv = valid_email_df.to_csv(index=False)
         b64 = base64.b64encode(csv.encode()).decode()
         button_label = "Download CSV"
-        button_download = f'<a href="data:file/csv;base64,{b64}" download="valid_emails.csv">{button_label}</a>'
+        button_download = f'<a href="data:file/csv;base64,{b64}" download="email_statuses.csv">{button_label}</a>'
         st.markdown(button_download, unsafe_allow_html=True)
 
     # Clear the validated emails
     st.sidebar.markdown("---")
     if st.sidebar.button("Clear", key="clear_button"):
         st.sidebar.empty()
-        st.session_state.valid_emails = []
+        st.session_state.email_statuses = []
 
 if __name__ == "__main__":
     main()
