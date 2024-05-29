@@ -7,8 +7,6 @@ import streamlit as st
 import re
 import urllib.parse
 import threading
-import time
-import base64
 
 SECRET = ""
 SESSION = requests.Session()
@@ -69,35 +67,23 @@ def stop_timer():
 
 def process_email(email):
     global SECRET
-    retries = 3
-    while retries > 0:
-        try:
-            get_secret()  # Ensure we have a valid secret
-            _hash = generate_hash(email, SECRET)
-            return get_status(email, _hash)
-        except Exception as e:
-            print(f"Error processing {email}: {e}")
-            retries -= 1
-            time.sleep(2)
-    return None
+    get_secret()  # Ensure we have a valid secret
+    _hash = generate_hash(email, SECRET)
+    return get_status(email, _hash)
 
 def validate_emails(emails, progress_bar):
     valid_emails = []
     update_secret()  # Start the secret update timer
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=9) as executor:
-        futures = {executor.submit(process_email, email): email for email in emails}
+        futures = [executor.submit(process_email, email) for email in emails]
 
         spinner_text = "Validating email addresses..."
         with st.spinner(spinner_text):
             for i, future in enumerate(concurrent.futures.as_completed(futures)):
-                email = futures[future]
-                try:
-                    result = future.result()
-                    if result:
-                        valid_emails.append(result)
-                except Exception as e:
-                    print(f"Error processing {email}: {e}")
+                email = future.result()
+                if email:
+                    valid_emails.append(email)
                 progress = (i + 1) / len(emails)
                 progress_bar.progress(progress)
 
