@@ -4,7 +4,6 @@ import bs4
 import concurrent.futures
 import pandas as pd
 import streamlit as st
-import base64
 import re
 import urllib.parse
 import threading
@@ -45,29 +44,14 @@ def get_status(email, _hash=None):
         get_secret()  # Ensure we have a valid secret
     _hash = generate_hash(email, SECRET)
     url = f"{API_BASE_URL}?secret_key={_hash}&email_address={urllib.parse.quote(email)}"
-    payload = {}
-    headers = {}
-    try:
-        requests.get("https://kounter.tk/badge/email_all")
-    except:
-        pass
-    response = SESSION.request("GET", url, headers=headers, data=payload)
+    response = SESSION.get(url)
     if response.text == "Unauthorized":
-        print(email, "------", url, "------", response.text)
         return process_email(email)
     else:
         response = response.json()
-        try:
-            if response["score"] > 0.5:
-                print(response)
-                try:
-                    requests.get("https://kounter.tk/badge/email_valid")
-                except:
-                    pass
-                return response
-            else:
-                return None
-        except:
+        if response.get("score", 0) > 0.5:
+            return response
+        else:
             return None
 
 def update_secret():
@@ -109,23 +93,17 @@ def validate_emails(emails, progress_bar):
 def main():
     st.set_page_config(page_title="Email Validator", page_icon=":envelope:")
     st.title("Email Address Validator")
-    
+
     st.markdown("""
-        This app allows you to validate email addresses from a CSV file or text input.
+        This app allows you to validate email addresses from a CSV file.
         
         **To validate email addresses from a CSV file:**
         1. Click on the "Upload CSV file" section in the sidebar.
         2. Select a CSV file containing email addresses.
         3. Choose the column containing the email addresses.
         4. Click the "Validate Email" button to start validation.
-        
-        **To validate email addresses from text input:**
-        1. Enter a list of email addresses separated by commas in the field below.
-        2. Click the "Validate Email" button to start validation.
-        
-        The validated email addresses will be displayed in a table below. You can select which columns to display using the dropdown menu. You can also download the validated email addresses as a CSV file by clicking the "Download CSV" button.
     """)
-    
+
     if "valid_emails" not in st.session_state:
         st.session_state.valid_emails = []
 
@@ -143,19 +121,6 @@ def main():
             progress_bar = st.progress(0)
             st.session_state.valid_emails += validate_emails(df[column_name].tolist(), progress_bar)
 
-    # Validate email addresses from text input
-    st.sidebar.write("### Enter email addresses")
-    email_input = st.sidebar.text_input("Enter email addresses (separated by comma)")
-    if email_input:
-        emails = [email.strip() for email in email_input.split(",")]
-
-        if st.sidebar.button("Validate Email", key="validate_text_button"):
-            total_emails = len(emails)
-            st.info(f"Total emails to process: {total_emails}")
-            
-            progress_bar = st.progress(0)
-            st.session_state.valid_emails += validate_emails(emails, progress_bar)
-
     # Display the validated email addresses
     if st.session_state.valid_emails:
         st.write(f"Found {len(st.session_state.valid_emails)} valid email addresses.")
@@ -172,7 +137,7 @@ def main():
         button_download = f'<a href="data:file/csv;base64,{b64}" download="valid_emails.csv">{button_label}</a>'
         st.markdown(button_download, unsafe_allow_html=True)
 
-    # Move the "Clear" button to the top of the sidebar
+    # Clear the validated emails
     st.sidebar.markdown("---")
     if st.sidebar.button("Clear", key="clear_button"):
         st.sidebar.empty()
