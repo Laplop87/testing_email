@@ -134,10 +134,10 @@ def main():
     if st.session_state.email_statuses:
         st.write(f"Processed {len(st.session_state.email_statuses)} email addresses.")
 
-        valid_email_df = pd.DataFrame(st.session_state.email_statuses)
-        st.write(valid_email_df)
+        email_status_df = pd.DataFrame(st.session_state.email_statuses)
+        st.write(email_status_df)
         
-        csv = valid_email_df.to_csv(index=False)
+        csv = email_status_df.to_csv(index=False)
         b64 = base64.b64encode(csv.encode()).decode()
         button_label = "Download CSV"
         button_download = f'<a href="data:file/csv;base64,{b64}" download="email_statuses.csv">{button_label}</a>'
