@@ -20,14 +20,18 @@ API_BASE_URL = "https://mailboxlayer.com/php_helper_scripts/email_api_n.php"
 def get_secret():
     global SECRET
     while not SECRET:  # Retry until a valid secret is obtained
-        response = SESSION.get(MAILBOX_LAYER_URL)
-        soup = bs4.BeautifulSoup(response.text, "html.parser")
-        secret_input = soup.select_one("input[name='scl_request_secret']")
-        if secret_input:
-            SECRET = secret_input.get("value")
-            print("New secret obtained:", SECRET)
-        else:
-            print("Secret not found. Retrying...")
+        try:
+            response = SESSION.get(MAILBOX_LAYER_URL)
+            soup = bs4.BeautifulSoup(response.text, "html.parser")
+            secret_input = soup.select_one("input[name='scl_request_secret']")
+            if secret_input:
+                SECRET = secret_input.get("value")
+                print("New secret obtained:", SECRET)
+            else:
+                print("Secret not found. Retrying...")
+                time.sleep(5)  # Wait before retrying
+        except requests.RequestException as e:
+            print(f"Error fetching secret: {e}")
             time.sleep(5)  # Wait before retrying
 
 def is_valid_email(email):
@@ -50,10 +54,14 @@ def get_status(email, _hash=None):
     if response.text == "Unauthorized":
         return process_email(email)
     else:
-        response = response.json()
-        if response.get("score", 0) > 0.5:
-            return response
-        else:
+        try:
+            response = response.json()
+            if response.get("score", 0) > 0.5:
+                return response
+            else:
+                return None
+        except ValueError:
+            print(f"Error decoding JSON response for {email}")
             return None
 
 def update_secret():
